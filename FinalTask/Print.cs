@@ -17,15 +17,14 @@ namespace FinalTask.Task1
         private const char TopRightCorner = '╗';
         private const char BottomLeftCorner = '╚';
         private const char BottomRightCorner = '╝';
-        private const char BottomCellSeparator = '╩';
+        private const char InnerBottomCellSeparator = '╩';
         private const char InnerLeft = '╠';
         private const char InnerRight = '╣';
         private const char InnerCellSeparator = '╬';
-        private const char MiddleTop = '╦';
+        private const char InnerTopCellSeparator = '╦';
         private const char SingleSpace = ' ';
 
         private const string NewLine = "\n";
-
 
         public Print(IView view, IDatabaseManager manager)
         {
@@ -35,15 +34,16 @@ namespace FinalTask.Task1
 
         public bool CanProcess(string command)
         {
-            return command.StartsWith("print ");
+            return command.StartsWith("print ", StringComparison.OrdinalIgnoreCase);
         }
 
         public void Process(string command)
         {
-            var commandPart = command.Split(' ');
+            var commandPart = command.Split(SingleSpace);
             if (commandPart.Length != 2)
-                throw new ArgumentException(
-                    "incorrect number of parameters. Expected 1, but is " + (commandPart.Length - 1));
+            {
+                throw new ArgumentException($"Incorrect number of parameters. Expected 1, but is {commandPart.Length - 1}");
+            }
             tableName = commandPart[1];
             var data = manager.GetTableData(tableName);
             view.Write(GetTableString(data));
@@ -51,89 +51,44 @@ namespace FinalTask.Task1
 
         private string GetTableString(IList<IDataSet> data)
         {
-            return (data.Count == 0) ? GetEmptyTable(tableName) : GetHeaderOfTheTable(data) + GetStringTableData(data);
+            return data.Count == 0 ? GetEmptyTable(tableName) : GetHeaderOfTheTable(data) + GetStringTableData(data);
         }
 
         private string GetEmptyTable(string tableName)
         {
-            var textEmptyTable = $"{CellSeparator} Table '{tableName}' is empty or does not exist {CellSeparator}";
-            var horizontalLine = new string(HorizontalLine, textEmptyTable.Length - 2);
+            var textEmptyTable = $"{SingleSpace}Table '{tableName}' is empty or does not exist{SingleSpace}";
 
-            return $"{TopLeftCorner}{horizontalLine}{TopRightCorner}{NewLine}{textEmptyTable}{NewLine}{BottomLeftCorner}{horizontalLine}{BottomRightCorner}{NewLine}";
+            return $"{GetTableTopBorder(1, textEmptyTable.Length)}{CellSeparator}{textEmptyTable}{CellSeparator}{NewLine}{GetTableBottomBorder(1, textEmptyTable.Length)}";
         }
 
         private int GetMaxColumnSizeWithPadding(IList<IDataSet> dataSets)
         {
-            const int EvenColumnLengthAdjestment = 2;
-            const int OddColumnLengthAdjestment = 3;
+            const int EvenColumnLengthAdjustment = 2;
+            const int OddColumnLengthAdjustment = 3;
             int maxColumnSize = dataSets.Count == 0 ? 0 : dataSets
                 .SelectMany(dataSet => dataSet.GetValues())
                 .Max(value => value.ToString().Length);
-            return maxColumnSize += (maxColumnSize % 2 == 0) ? EvenColumnLengthAdjestment : OddColumnLengthAdjestment;
+            return maxColumnSize += (maxColumnSize % 2 == 0) ? EvenColumnLengthAdjustment : OddColumnLengthAdjustment;
         }
 
         private string GetStringTableData(IList<IDataSet> dataSets)
         {
             var rowsCount = dataSets.Count;
-            var maxColumnSize = rowsCount == 0 ? 0 : GetMaxColumnSizeWithPadding(dataSets);
-            var result = string.Empty;
+            var maxColumnSize = GetMaxColumnSizeWithPadding(dataSets);
+            var result = new StringBuilder();
             var columnCount = GetColumnCount(dataSets);
             for (var row = 0; row < rowsCount; row++)
             {
-                var values = dataSets[row].GetValues();
-                result += CellSeparator;
-                for (var column = 0; column < columnCount; column++)
-                {
-                    var valuesLength = values[column].ToString().Length;
-                    if (valuesLength % 2 == 0)
-                    {
-                        for (var j = 0; j < (maxColumnSize - valuesLength) / 2; j++)
-                            result += SingleSpace;
-                        result += values[column].ToString();
-                        for (var j = 0; j < (maxColumnSize - valuesLength) / 2; j++)
-                            result += SingleSpace;
-                        result += CellSeparator;
-                    }
-                    else
-                    {
-                        for (var j = 0; j < (maxColumnSize - valuesLength) / 2; j++)
-                            result += SingleSpace;
-                        result += values[column].ToString();
-                        for (var j = 0; j <= (maxColumnSize - valuesLength) / 2; j++)
-                            result += SingleSpace;
-                        result += CellSeparator;
-                    }
-                }
+                var values = dataSets[row].GetValues().Select(s => s.ToString()).ToList();
 
-                result += NewLine;
-                if (row < rowsCount - 1)
-                {
-                    result += InnerLeft;
-                    for (var j = 1; j < columnCount; j++)
-                    {
-                        for (var i = 0; i < maxColumnSize; i++)
-                            result += HorizontalLine;
-                        result += InnerCellSeparator;
-                    }
+                result.Append(GetRowValues(values, columnCount, maxColumnSize));
 
-                    for (var i = 0; i < maxColumnSize; i++)
-                        result += HorizontalLine;
-                    result += $"{InnerRight}{NewLine}";
-                }
+                result.Append((row < rowsCount - 1)
+                    ? GetInnerBaseForRow(columnCount, maxColumnSize)
+                    : GetTableBottomBorder(columnCount, maxColumnSize));
             }
 
-            result += BottomLeftCorner;
-            for (var j = 1; j < columnCount; j++)
-            {
-                for (var i = 0; i < maxColumnSize; i++)
-                    result += HorizontalLine;
-                result += BottomCellSeparator;
-            }
-
-            for (var i = 0; i < maxColumnSize; i++)
-                result += HorizontalLine;
-            result += $"{BottomRightCorner}{NewLine}";
-            return result;
+            return result.ToString();
         }
 
         private int GetColumnCount(IList<IDataSet> dataSets)
@@ -144,8 +99,8 @@ namespace FinalTask.Task1
         private string GetFormattedColumnName(string columnName, int maxColumnSize)
         {
             var paddingLength = maxColumnSize - columnName.Length;
-            var leftPadding = new string(' ', paddingLength / 2);
-            var rightPadding = new string(' ', (paddingLength + 1) / 2);
+            var leftPadding = new string(SingleSpace, paddingLength / 2);
+            var rightPadding = new string(SingleSpace, (paddingLength + 1) / 2);
 
             return $"{leftPadding}{columnName}{rightPadding}";
         }
@@ -157,18 +112,30 @@ namespace FinalTask.Task1
             for (var j = 1; j <= columnCount; j++)
             {
                 result.Append(new string(HorizontalLine, maxColumnSize));
-                result.Append((j < columnCount) ? MiddleTop : $"{TopRightCorner}{NewLine}");
+                result.Append((j < columnCount) ? InnerTopCellSeparator : $"{TopRightCorner}{NewLine}");
             }
             return result;
         }
 
-        private StringBuilder GetColumnNames(IList<string> columnNames, int columnCount, int maxColumnSize)
+        private StringBuilder GetTableBottomBorder(int columnCount, int maxColumnSize)
+        {
+            var result = new StringBuilder();
+            result.Append(BottomLeftCorner);
+            for (var j = 1; j <= columnCount; j++)
+            {
+                result.Append(new string(HorizontalLine, maxColumnSize));
+                result.Append((j < columnCount) ? InnerBottomCellSeparator : $"{BottomRightCorner}{NewLine}");
+            }
+            return result;
+        }
+
+        private StringBuilder GetRowValues(IList<string> values, int columnCount, int maxColumnSize)
         {
             var result = new StringBuilder();
             for (var column = 0; column < columnCount; column++)
             {
                 result.Append(CellSeparator);
-                result.Append(GetFormattedColumnName(columnNames[column], maxColumnSize));
+                result.Append(GetFormattedColumnName(values[column], maxColumnSize));
             }
             result.Append($"{CellSeparator}{NewLine}");
             return result;
@@ -192,7 +159,7 @@ namespace FinalTask.Task1
             var columnCount = GetColumnCount(dataSets);
             var columnNames = dataSets[0].GetColumnNames();
 
-            return $"{GetTableTopBorder(columnCount, maxColumnSize)}{GetColumnNames(columnNames, columnCount, maxColumnSize)}{GetInnerBaseForRow(columnCount, maxColumnSize)}";
+            return $"{GetTableTopBorder(columnCount, maxColumnSize)}{GetRowValues(columnNames, columnCount, maxColumnSize)}{GetInnerBaseForRow(columnCount, maxColumnSize)}";
         }
     }
 }
